@@ -1,3 +1,5 @@
+import streamlit as st
+from fpdf import fpdf
 import math
 
 WASTE = 0.10
