@@ -231,7 +231,7 @@ if st.session_state.is_admin:
 # ============================================================
 # Customer-facing Quote Form (Terrain removed; rentals removed)
 # ============================================================
-st.markdown("### Get Your Fence Quote")
+st.markdown("### Free Fence Install Estimator")
 
 with st.form("quote_form"):
     col1, col2 = st.columns(2)
