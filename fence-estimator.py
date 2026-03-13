@@ -1,4 +1,5 @@
 import math
+import textwrap
 from pathlib import Path
 from datetime import date, timedelta
 
@@ -22,9 +23,10 @@ PAGE_ICON = str(LOGO_APP_PATH) if LOGO_APP_PATH.exists() else "🧰"
 # ============================================================
 st.set_page_config(
     page_title="Roberts Fence Estimator",
-    page_icon=PAGE_ICON,   # image path or emoji supported [3](https://github.com/streamlit/streamlit/issues/11370)
+    page_icon=PAGE_ICON,   # image path or emoji supported [3](https://fpdf.org/en/doc/multicell.htm)
     layout="centered"
 )
+
 st.title("Roberts Residential, LLC. Fence Estimator")
 st.caption("Dothan, AL")
 
@@ -80,6 +82,29 @@ def money_md(x: float) -> str:
     # Escape $ so Streamlit markdown doesn't treat it as math
     return f"\\${x:,.2f}"
 
+def pdf_bullets(pdf: FPDF, items: list[str], line_h: float = 6.0) -> None:
+    """
+    Safe bullet printing for fpdf2:
+    - Forces X back to left margin before each multi_cell
+    - Uses explicit available width (avoids w=0 cursor edge cases)
+    - Wraps long text safely
+    """
+    effective_w = pdf.w - pdf.l_margin - pdf.r_margin
+
+    for item in items:
+        pdf.set_x(pdf.l_margin)
+
+        bullet_txt = f"- {item}"
+        bullet_txt = textwrap.fill(
+            bullet_txt,
+            width=110,
+            break_long_words=True,
+            break_on_hyphens=True
+        )
+
+        pdf.multi_cell(effective_w, line_h, bullet_txt)
+        pdf.set_x(pdf.l_margin)
+
 # ============================================================
 # Scope Notes Defaults (Warranty intentionally silent)
 # Implementation #2: Admin editable via sidebar text areas
@@ -121,6 +146,7 @@ DEFAULT_TERMS = [
 # - Near-privacy note in body
 # - Phone/Email last items printed in body
 # - Haul-off line uses requested wording
+# - Uses safe bullet printer to avoid multi_cell width errors
 # ============================================================
 def build_quote_pdf(quote: dict) -> bytes:
     pdf = FPDF()
@@ -166,6 +192,7 @@ def build_quote_pdf(quote: dict) -> bytes:
     pdf.cell(0, 8, f"Gates: {quote['gates']}", ln=1)
     pdf.cell(0, 8, f"Terrain: {quote['terrain']}", ln=1)
     pdf.cell(0, 8, f"Demo & Removal: {'Yes' if quote['demo_old'] else 'No'}", ln=1)
+
     if quote["demo_old"]:
         pdf.cell(0, 8, f"Old posts in concrete: {'Yes' if quote['old_concrete'] else 'No'}", ln=1)
         pdf.cell(0, 8, f"Haul-off/Disposal add-on: {'Yes' if quote.get('haul_off_selected', False) else 'No'}", ln=1)
@@ -195,34 +222,32 @@ def build_quote_pdf(quote: dict) -> bytes:
         pdf.cell(0, 7, f"Rentals/Disposal: ${quote['rental_sell']:,.2f}", ln=1)
 
     # ----------------------------
-    # Scope notes (Admin editable)
+    # Scope notes (Admin editable) - SAFE multi_cell handling
     # ----------------------------
     pdf.ln(8)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "What's Included", ln=1)
     pdf.set_font("Arial", "", 11)
-    for item in quote.get("scope_included", []):
-        pdf.multi_cell(0, 6, f"- {item}")
+    pdf_bullets(pdf, quote.get("scope_included", []))
 
     pdf.ln(2)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Exclusions / Assumptions", ln=1)
     pdf.set_font("Arial", "", 11)
-    for item in quote.get("scope_excluded", []):
-        pdf.multi_cell(0, 6, f"- {item}")
+    pdf_bullets(pdf, quote.get("scope_excluded", []))
 
     pdf.ln(2)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Terms", ln=1)
     pdf.set_font("Arial", "", 11)
-    for item in quote.get("terms", []):
-        pdf.multi_cell(0, 6, f"- {item}")
+    pdf_bullets(pdf, quote.get("terms", []))
 
     # Near-privacy note in body
     pdf.ln(6)
     pdf.set_font("Arial", "I", 10)
     pdf.multi_cell(
-        0, 6,
+        pdf.w - pdf.l_margin - pdf.r_margin,
+        6,
         "Near-privacy wood fences may show small gaps over time due to shrinkage/seasonal movement."
     )
 
@@ -404,7 +429,7 @@ with st.form("quote_form"):
         index=0
     )
 
-    # Streamlit forms require a submit button inside the form [1](https://codeberg.org/rdwz/gitmoji)
+    # Streamlit forms require a submit button inside the form [4](https://peerdh.com/blogs/programming-insights/streamlits-download-button-a-comprehensive-guide)
     submitted = st.form_submit_button("Calculate Quote", type="primary")
 
 # ============================================================
@@ -551,7 +576,7 @@ if submitted:
 
     pdf_bytes = build_quote_pdf(quote)
 
-    # Download button sends bytes to browser [2](https://cheat-sheet.streamlit.app/)
+    # Download button sends bytes to browser [5](https://github.com/py-pdf/fpdf2/issues/464)
     st.download_button(
         label="📄 Download Professional Quote PDF",
         data=pdf_bytes,
