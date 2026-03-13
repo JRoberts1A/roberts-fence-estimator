@@ -154,7 +154,7 @@ def build_quote_pdf(quote: dict) -> bytes:
     # ----------------------------
     # FOOTER: Phone + Email (bottom margin)
     # ----------------------------
-    pdf.set_y(-18)
+    pdf.set_y(-22)
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 5, PHONE_TEXT, ln=1, align="C")
     pdf.cell(0, 5, EMAIL_TEXT, ln=1, align="C")
