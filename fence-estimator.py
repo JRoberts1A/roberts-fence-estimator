@@ -22,8 +22,7 @@ def build_quote_pdf(length_ft, height_ft, gates, terrain, demo_old, old_concrete
 
     demo_text = "Yes" if demo_old else "No"
     pdf.cell(0, 8, f"Demo & Removal: {demo_text}", ln=1)
-    if demo_old:
-        pdf.cell(0, 8, f"Old posts in concrete: {'Yes' if old_concrete else 'No'}", ln=1)
+    if demo_old: pdf.cell(0, 8, f"Old posts in concrete: {'Yes' if old_concrete else 'No'}", ln=1)
 
     pdf.ln(6)
     pdf.set_font("Arial", "B", 13)
