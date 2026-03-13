@@ -80,23 +80,23 @@ def money_md(x: float) -> str:
 
 def build_quote_pdf(quote: dict) -> bytes:
     pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=28)  # reserve space for note + footer
+    # Reserve bottom margin space for footer lines
+    pdf.set_auto_page_break(auto=True, margin=22)
     pdf.add_page()
 
     # ----------------------------
-    # Header: Logo + Title (no overlap)
+    # HEADER: Logo + Title (no overlap)
     # ----------------------------
     top_y = 8
     title_y = 20  # fallback if no logo
 
     if LOGO_PDF_PATH.exists():
         try:
-            logo_w_mm = 75  # tweak 60–90 as desired
+            logo_w_mm = 75  # adjust 60–90 as desired
             x = (pdf.w - logo_w_mm) / 2.0
             pdf.image(str(LOGO_PDF_PATH), x=x, y=top_y, w=logo_w_mm)
 
-            # Ensure title starts safely below the logo image block
-            # (fixed offset works reliably without needing image height math)
+            # Keep title safely below the logo area so it never collides
             title_y = top_y + 58
         except Exception:
             title_y = 20
@@ -107,7 +107,7 @@ def build_quote_pdf(quote: dict) -> bytes:
     pdf.ln(6)
 
     # ----------------------------
-    # Body
+    # BODY: Quote details
     # ----------------------------
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 8, f"Fence Length: {quote['length_ft']} ft", ln=1)
@@ -142,25 +142,24 @@ def build_quote_pdf(quote: dict) -> bytes:
         pdf.cell(0, 7, f"Rentals/Disposal: ${quote['rental_sell']:,.2f}", ln=1)
 
     # ----------------------------
-    # Bottom note (after body) + Footer contact
+    # BODY: Near-privacy note (NOW in the body)
     # ----------------------------
-    # Near-privacy note: place ABOVE footer, but BELOW body content.
-    # set_y with negative values positions relative to bottom of page.
-    pdf.set_y(-38)
+    pdf.ln(6)
     pdf.set_font("Arial", "I", 10)
     pdf.multi_cell(
         0, 6,
-        "Near-privacy wood fences may show small gaps over time due to shrinkage/seasonal movement.",
-        align="C"
+        "Near-privacy wood fences may show small gaps over time due to shrinkage/seasonal movement."
     )
 
-    # Footer: Phone on one line, Email on next (as requested)
-    pdf.set_y(-20)
+    # ----------------------------
+    # FOOTER: Phone + Email (bottom margin)
+    # ----------------------------
+    pdf.set_y(-18)
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 5, PHONE_TEXT, ln=1, align="C")
     pdf.cell(0, 5, EMAIL_TEXT, ln=1, align="C")
 
-    # Output as bytes (works with pyfpdf or fpdf2 return types)
+    # Output as bytes (supports both pyfpdf + fpdf2 behaviors)
     out = pdf.output(dest="S")
     return out.encode("latin-1") if isinstance(out, str) else bytes(out)
 
