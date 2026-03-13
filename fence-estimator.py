@@ -25,8 +25,9 @@ st.set_page_config(
     layout="centered",
 )
 
-st.title("Roberts Residential, LLC. Fence Estimator")
-st.caption("Dothan, AL")
+st.title("Roberts Residential, LLC.")
+st.title("Fence Estimator")
+st.caption("Serving the Greater Dothan Area & Wiregrass Region)
 
 # Center logo in the app UI (customer-facing)
 if LOGO_APP_PATH.exists():
