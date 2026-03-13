@@ -21,8 +21,8 @@ PAGE_ICON = str(LOGO_APP_PATH) if LOGO_APP_PATH.exists() else "🧰"
 # ============================================================
 st.set_page_config(
     page_title="Roberts Fence Estimator",
-    page_icon=PAGE_ICON,     # image path or emoji supported [3](https://github.com/streamlit/streamlit/issues/11370)
-    layout="centered"
+    page_icon=PAGE_ICON,
+    layout="centered",
 )
 
 st.title("Roberts Residential, LLC. Fence Estimator")
@@ -42,7 +42,6 @@ if "is_admin" not in st.session_state:
 
 def unlock_admin(pin: str) -> bool:
     expected = st.secrets.get("ADMIN_PIN", "")
-    # If no secret is set, do not allow unlock (safer for public app)
     if not expected:
         return False
     return pin == expected
@@ -64,6 +63,8 @@ with st.sidebar:
 # ============================================================
 # Helpers
 # ============================================================
+NEAR_PRIVACY_GAP_IN = 0.125  # fixed internal assumption (removed from UI)
+
 def ceil_qty(x: float) -> int:
     return int(math.ceil(x))
 
@@ -74,7 +75,7 @@ def pickets_per_ft_from_width_gap(picket_width_in: float, gap_in: float) -> floa
     return 12.0 / (picket_width_in + gap_in)
 
 def money_md(x: float) -> str:
-    # Escape $ so Streamlit Markdown doesn't treat it as math
+    # Escape $ so Streamlit markdown doesn't treat it as math
     return f"\\${x:,.2f}"
 
 def build_quote_pdf(quote: dict) -> bytes:
@@ -109,7 +110,7 @@ def build_quote_pdf(quote: dict) -> bytes:
     pdf.cell(0, 6, EMAIL_TEXT, ln=1, align="C")
     pdf.ln(6)
 
-    # --- 5) Title (moved below Near-privacy + contact) ---
+    # --- 5) Title ---
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "Roberts Residential LLC Fence Quote", align="C", ln=1)
     pdf.ln(6)
@@ -147,13 +148,16 @@ def build_quote_pdf(quote: dict) -> bytes:
 # Customer mode defaults
 labor_rate = 65.0
 waste_pct = 0.10
+
 base_install_hr_per_ft_6 = 0.22
 height_8_multiplier = 1.15
 gate_labor_hrs_each = 3.0
+
 demo_hr_per_ft = 0.12
 concrete_post_extra_hr = 0.75
 
 terrain_factors = {"Flat": 1.0, "Sloped/Hilly": 1.25, "Rocky": 1.50}
+
 mat_markup = 1.15
 rental_markup = 1.10
 
@@ -162,12 +166,21 @@ rail_cost = 7.25
 picket_cost = 3.98
 concrete_bag_cost = 4.38
 gate_hw_cost = 37.98
-base_bracket_cost = 14.78
+
+# Requirement #5: base/bracket default $22/unit (admin adjustable)
+base_bracket_cost = 22.00
 
 include_consumables = True
 consumables_per_ft = 0.30
 
-# Admin mode: show/override controls
+# Admin-only: picket width selection (5.5 or 6.0)
+picket_width_in = 5.5  # default
+# Admin-only rentals toggles & costs
+enable_equipment_rental = True
+equipment_rental_cost = 95.0
+enable_bin_rental = True
+bin_rental_cost = 250.0
+
 if st.session_state.is_admin:
     with st.sidebar:
         st.markdown("## Assumptions (Admin)")
@@ -175,35 +188,47 @@ if st.session_state.is_admin:
         labor_rate = st.number_input("All-in Billable Labor Rate ($/hr)", min_value=1.0, value=float(labor_rate), step=1.0)
         waste_pct = st.slider("Waste % (materials/consumables)", 0, 25, int(waste_pct * 100)) / 100.0
 
-        st.subheader("Production")
+        st.subheader("Pickets (Admin)")
+        picket_width_in = st.selectbox("Picket width (inches)", options=[5.5, 6.0], index=0)
+
+        st.subheader("Production (Admin)")
         base_install_hr_per_ft_6 = st.number_input("Install hrs/ft (6 ft)", min_value=0.05, value=float(base_install_hr_per_ft_6), step=0.01)
         height_8_multiplier = st.number_input("8 ft labor multiplier", min_value=1.00, value=float(height_8_multiplier), step=0.05)
         gate_labor_hrs_each = st.number_input("Gate labor add (hrs per gate)", min_value=0.0, value=float(gate_labor_hrs_each), step=0.5)
+
         demo_hr_per_ft = st.number_input("Demo base (hrs/ft)", min_value=0.0, value=float(demo_hr_per_ft), step=0.01)
         concrete_post_extra_hr = st.number_input("Concrete post extra (hrs/post)", min_value=0.0, value=float(concrete_post_extra_hr), step=0.05)
 
-        st.subheader("Terrain factors")
+        st.subheader("Terrain factors (Admin)")
         terrain_factors = {
             "Flat": st.number_input("Flat factor", min_value=0.5, value=float(terrain_factors["Flat"]), step=0.05),
             "Sloped/Hilly": st.number_input("Sloped/Hilly factor", min_value=0.5, value=float(terrain_factors["Sloped/Hilly"]), step=0.05),
             "Rocky": st.number_input("Rocky factor", min_value=0.5, value=float(terrain_factors["Rocky"]), step=0.05),
         }
 
-        st.subheader("Pricing (materials/rentals only)")
+        st.subheader("Pricing (Admin)")
         mat_markup = st.number_input("Materials markup (1.15 = 15%)", min_value=1.0, value=float(mat_markup), step=0.01)
         rental_markup = st.number_input("Rentals/Disposal handling (1.10 = 10%)", min_value=1.0, value=float(rental_markup), step=0.01)
 
-        st.subheader("Unit costs")
+        st.subheader("Unit costs (Admin)")
         post_cost = st.number_input("Post cost ($ each)", min_value=0.0, value=float(post_cost), step=0.25)
         rail_cost = st.number_input("Rail/stringer cost ($ each)", min_value=0.0, value=float(rail_cost), step=0.25)
         picket_cost = st.number_input("Dog-ear picket cost ($ each)", min_value=0.0, value=float(picket_cost), step=0.05)
         concrete_bag_cost = st.number_input("Concrete bag (50-lb) cost ($)", min_value=0.0, value=float(concrete_bag_cost), step=0.05)
         gate_hw_cost = st.number_input("Gate hardware kit cost ($ each)", min_value=0.0, value=float(gate_hw_cost), step=0.50)
-        base_bracket_cost = st.number_input("Post base/bracket cost ($ each)", min_value=0.0, value=float(base_bracket_cost), step=0.25)
 
-        st.subheader("Consumables (includes nails/fasteners)")
+        base_bracket_cost = st.number_input("Bracket/Base unit cost ($ each)", min_value=0.0, value=float(base_bracket_cost), step=0.50)
+
+        st.subheader("Consumables (Admin)")
         include_consumables = st.checkbox("Include consumables allowance", value=include_consumables)
         consumables_per_ft = st.number_input("Consumables allowance ($/ft)", min_value=0.0, value=float(consumables_per_ft), step=0.05)
+
+        st.subheader("Rentals (Admin-only)")
+        st.caption("Applied only when Demo + Concrete are selected.")
+        enable_equipment_rental = st.checkbox("Include equipment rental", value=enable_equipment_rental)
+        equipment_rental_cost = st.number_input("Equipment rental cost ($)", min_value=0.0, value=float(equipment_rental_cost), step=5.0)
+        enable_bin_rental = st.checkbox("Include bin rental", value=enable_bin_rental)
+        bin_rental_cost = st.number_input("Bin rental cost ($)", min_value=0.0, value=float(bin_rental_cost), step=10.0)
 
 # ============================================================
 # Customer-facing Quote Form
@@ -223,14 +248,6 @@ with st.form("quote_form"):
         demo_old = st.checkbox("Include Demo & Removal of Old Fence", value=True)
         old_concrete = st.checkbox("Old posts are in concrete", value=True) if demo_old else False
 
-    st.markdown("### Fence Style (Near-Privacy)")
-    picket_width_in = st.number_input("Picket width (inches, actual)", min_value=4.0, value=5.5, step=0.1)
-    install_gap_in = st.number_input("Install gap (inches)", min_value=0.0, value=0.125, step=0.025)
-
-    st.markdown("### Rails / Stringers")
-    rails_default = 3 if height_ft == 6 else 4
-    rails_per_section = st.number_input("Rails per 8-ft section", min_value=2, value=int(rails_default), step=1)
-
     st.markdown("### Concrete Option")
     pier_option = st.selectbox(
         "Concrete option",
@@ -243,39 +260,32 @@ with st.form("quote_form"):
         index=0
     )
 
-    phd_rental_cost = 0.0
-    bin_rental_cost = 0.0
-    if demo_old and old_concrete:
-        st.markdown("### Rentals / Disposal")
-        rent_phd = st.checkbox("Rent post hole digger / breaker", value=True)
-        rent_bin = st.checkbox("Rent portable rubbish bin", value=True)
-        if rent_phd:
-            phd_rental_cost = st.number_input("Equipment rental cost ($)", min_value=0.0, value=95.0, step=5.0)
-        if rent_bin:
-            bin_rental_cost = st.number_input("Bin rental cost ($)", min_value=0.0, value=250.0, step=10.0)
-
-    # Submit button must be inside the form [1](https://codeberg.org/rdwz/gitmoji)
-    submitted = st.form_submit_button("Calculate Quote", type="primary")
+    submitted = st.form_submit_button("Calculate Quote", type="primary")  # forms require this inside form
 
 # ============================================================
-# Calculate & Results (Customer-facing)
+# Calculate & Results
 # ============================================================
 if submitted:
     terrain_factor = terrain_factors[terrain]
 
+    # Rails rule (#4): 3 rails for 6ft, 4 rails for 8ft
+    rails_per_section = 3 if height_ft == 6 else 4
+
     sections = ceil_qty(length_ft / 8.0)
     posts = sections + 1
+    rails = sections * rails_per_section
 
-    ppf = pickets_per_ft_from_width_gap(picket_width_in, install_gap_in)
+    # Pickets per foot uses ADMIN picket width + fixed internal gap (#2, #3)
+    ppf = pickets_per_ft_from_width_gap(picket_width_in, NEAR_PRIVACY_GAP_IN)
     pickets = ceil_qty(length_ft * ppf)
-    rails = sections * int(rails_per_section)
 
     posts_w = apply_waste_qty(posts, waste_pct)
-    pickets_w = apply_waste_qty(pickets, waste_pct)
     rails_w = apply_waste_qty(rails, waste_pct)
+    pickets_w = apply_waste_qty(pickets, waste_pct)
 
     gate_posts = gates * 2
 
+    # Concrete options
     if pier_option == "Standard (2 bags per post)":
         bags_total = posts * 2
         bases_total = 0
@@ -285,19 +295,19 @@ if submitted:
     elif pier_option == "Heavy piers all posts (3 bags per post)":
         bags_total = posts * 3
         bases_total = 0
-    else:
+    else:  # Bracket/base
         bags_total = posts * 2
         bases_total = posts
 
     bags_w = apply_waste_qty(bags_total, waste_pct)
     bases_w = apply_waste_qty(bases_total, waste_pct) if bases_total > 0 else 0
 
-    # Consumables modeled as per-foot allowance (includes nails/fasteners)
+    # Consumables (includes nails/fasteners)
     consumables_cost = 0.0
     if include_consumables:
         consumables_cost = (length_ft * consumables_per_ft) * (1.0 + waste_pct)
 
-    # Materials cost (then marked up)
+    # Materials cost (then markup)
     mat_cost = (
         (posts_w * post_cost) +
         (rails_w * rail_cost) +
@@ -308,7 +318,7 @@ if submitted:
     )
     mat_sell = mat_cost * mat_markup
 
-    # Labor (billable rate; no markup applied again)
+    # Labor (billable rate; no double-markup)
     height_factor = 1.0 if height_ft == 6 else float(height_8_multiplier)
     install_hrs = (length_ft * base_install_hr_per_ft_6 * terrain_factor) * height_factor
     install_hrs += gates * gate_labor_hrs_each
@@ -322,13 +332,19 @@ if submitted:
     labor_hrs = install_hrs + demo_hrs
     labor_sell = labor_hrs * labor_rate
 
-    rental_total = phd_rental_cost + bin_rental_cost
+    # Rentals admin-only (#6): apply only when demo + concrete are selected
+    rental_total = 0.0
+    if demo_old and old_concrete:
+        if enable_equipment_rental:
+            rental_total += equipment_rental_cost
+        if enable_bin_rental:
+            rental_total += bin_rental_cost
     rental_sell = rental_total * rental_markup if rental_total > 0 else 0.0
 
     total = mat_sell + consumables_cost + labor_sell + rental_sell
     per_ft = total / float(length_ft)
 
-    # --- Customer-facing results (clean) ---
+    # Customer-facing results
     st.success(f"**Total Installed Price:** {money_md(total)} ({money_md(per_ft)}/ft)")
 
     st.markdown("### What’s Included")
@@ -336,7 +352,7 @@ if submitted:
         "- Materials and professional installation (dog-ear near-privacy)\n"
         "- Standard concrete set per post (2 bags/post) unless upgraded\n"
         "- Cleanup and haul-off (when demo is selected)\n"
-        "- Near-privacy note: wood may shrink and small gaps may appear over time"
+        "- Wood may shrink and small gaps may appear over time"
     )
 
     # Build PDF + Download
@@ -360,7 +376,6 @@ if submitted:
 
     pdf_bytes = build_quote_pdf(quote)
 
-    # st.download_button sends bytes to the user’s browser [2](https://cheat-sheet.streamlit.app/)
     st.download_button(
         label="📄 Download Professional Quote PDF",
         data=pdf_bytes,
