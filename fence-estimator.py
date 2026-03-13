@@ -2,8 +2,8 @@ import streamlit as st
 from fpdf import FPDF
 
 st.set_page_config(page_title="Roberts Fence Estimator", layout="centered")
-st.title("🛠️ Roberts Residential Fence Estimator")
-st.caption("Dothan, AL • Fast • Reliable • In-House Crew")
+st.title("Roberts Residential, LLC. Fence Estimator")
+st.caption("Dothan, AL")
 
 col1, col2 = st.columns(2)
 with col1:
