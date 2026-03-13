@@ -4,8 +4,10 @@ from fpdf import FPDF
 # ----------------------------
 # Helpers
 # ----------------------------
-def build_quote_pdf(length_ft, height_ft, gates, terrain, demo_old, old_concrete,
-                    posts, pickets, labor_hrs, demo_cost, total, per_ft):
+def build_quote_pdf(
+    length_ft, height_ft, gates, terrain, demo_old, old_concrete,
+    posts, pickets, labor_hrs, demo_cost, total, per_ft
+):
     pdf = FPDF()
     pdf.add_page()
 
@@ -20,8 +22,7 @@ def build_quote_pdf(length_ft, height_ft, gates, terrain, demo_old, old_concrete
     pdf.cell(0, 8, f"Gates: {gates}", ln=1)
     pdf.cell(0, 8, f"Terrain: {terrain}", ln=1)
 
-    demo_text = "Yes" if demo_old else "No"
-    pdf.cell(0, 8, f"Demo & Removal: {demo_text}", ln=1)
+    pdf.cell(0, 8, f"Demo & Removal: {'Yes' if demo_old else 'No'}", ln=1)
     if demo_old:
         pdf.cell(0, 8, f"Old posts in concrete: {'Yes' if old_concrete else 'No'}", ln=1)
 
@@ -31,33 +32,24 @@ def build_quote_pdf(length_ft, height_ft, gates, terrain, demo_old, old_concrete
 
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 8, f"Price per foot: ${per_ft:,.2f}/ft", ln=1)
-    pdf.ln(4)
 
+    pdf.ln(4)
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 7, f"Posts: {posts} | Pickets: {pickets} | Labor: {labor_hrs:.1f} hrs", ln=1)
     if demo_old:
         pdf.cell(0, 7, f"Demo cost included: ${demo_cost:,.2f}", ln=1)
 
-    # Return PDF as bytes for Streamlit download
-    return pdf.output(dest="S").encode("latin-1")
+    # ---- FIX: Handle str vs bytes/bytearray safely ----
+    out = pdf.output(dest="S")
+    return out.encode("latin-1") if isinstance(out, str) else bytes(out)
 
 
 # ----------------------------
-# Page config (must be early)
+# Page config
 # ----------------------------
-st.set_page_config(
-    page_title="Roberts Fence Estimator",
-    layout="centered",
-    # Optional: use an emoji or your logo as favicon:
-    # page_icon="🧰",  # emoji option
-    # page_icon="assets/logo.png",  # image option
-)  # st.set_page_config supports emoji or image for page_icon. [2](https://github.com/streamlit/streamlit/issues/10911)
-
+st.set_page_config(page_title="Roberts Fence Estimator", layout="centered")
 st.title("Roberts Residential, LLC. Fence Estimator")
 st.caption("Dothan, AL")
-
-# Optional: show your logo (put it in assets/logo.png)
-# st.image("assets/logo.png", width=170)
 
 # ----------------------------
 # Inputs
@@ -71,10 +63,10 @@ with col1:
 
 with col2:
     terrain = st.selectbox("Terrain", ["Flat", "Sloped/Hilly", "Rocky"])
-    demo_old = st.checkbox("Include Demo & Removal of Old Fence", value=True)  # no &amp;
+    demo_old = st.checkbox("Include Demo & Removal of Old Fence", value=True)
     old_concrete = st.checkbox("Old posts are in concrete", value=True) if demo_old else False
 
-# Terrain/soil factors
+# Factors
 terrain_factor = 1.0
 soil_type = "normal"
 if terrain == "Sloped/Hilly":
@@ -110,20 +102,18 @@ if st.button("Calculate Quote", type="primary"):
         (posts * 2 * 6) +
         (gates * 350)
     )
-
     labor_cost = labor_hrs * 22
     subtotal = mat_cost + labor_cost + demo_cost
     total = round(subtotal * 1.40, 2)
     per_ft = round(total / length_ft, 2)
 
-    # Display (escape $ to avoid Streamlit Markdown math-mode)
+    # Display (escape $ in Streamlit Markdown)
     st.success(f"**Total Installed Price:** \\${total:,.2f} (\\${per_ft:,.2f}/ft)")
     st.write(f"Posts: {posts} | Pickets: {pickets} | Labor: {labor_hrs:.1f} hrs")
-
     if demo_old:
         st.info(f"Demo included: \\${demo_cost:,.2f}")
 
-    # Build PDF bytes and provide a real download button
+    # Build PDF and download
     pdf_bytes = build_quote_pdf(
         length_ft, height_ft, gates, terrain, demo_old, old_concrete,
         posts, pickets, labor_hrs, demo_cost, total, per_ft
@@ -134,7 +124,6 @@ if st.button("Calculate Quote", type="primary"):
         data=pdf_bytes,
         file_name="Roberts_Fence_Quote.pdf",
         mime="application/pdf",
-        type="secondary",
-    )  # st.download_button is the correct way to download bytes to the user. [1](https://peerdh.com/blogs/programming-insights/streamlits-download-button-a-comprehensive-guide)
+    )  # downloads bytes to the user's browser [1](https://peerdh.com/blogs/programming-insights/streamlits-download-button-a-comprehensive-guide)
 
 st.caption("Built for Roberts Residential LLC • Dothan, AL")
