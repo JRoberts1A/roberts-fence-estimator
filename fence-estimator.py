@@ -80,42 +80,35 @@ def money_md(x: float) -> str:
 
 def build_quote_pdf(quote: dict) -> bytes:
     pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=28)  # reserve space for note + footer
     pdf.add_page()
 
-    # Logo
+    # ----------------------------
+    # Header: Logo + Title (no overlap)
+    # ----------------------------
     top_y = 8
+    title_y = 20  # fallback if no logo
+
     if LOGO_PDF_PATH.exists():
         try:
-            logo_w_mm = 75
+            logo_w_mm = 75  # tweak 60–90 as desired
             x = (pdf.w - logo_w_mm) / 2.0
             pdf.image(str(LOGO_PDF_PATH), x=x, y=top_y, w=logo_w_mm)
-            pdf.set_y(top_y + 52)
+
+            # Ensure title starts safely below the logo image block
+            # (fixed offset works reliably without needing image height math)
+            title_y = top_y + 58
         except Exception:
-            pdf.set_y(16)
-    else:
-        pdf.set_y(16)
+            title_y = 20
 
-    # Near-privacy note (above contact/title)
-    pdf.set_font("Arial", "I", 10)
-    pdf.multi_cell(
-        0, 6,
-        "Near-privacy wood fences may show small gaps over time due to shrinkage/seasonal movement.",
-        align="C"
-    )
-    pdf.ln(4)
-
-    # Phone / email
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 6, PHONE_TEXT, ln=1, align="C")
-    pdf.cell(0, 6, EMAIL_TEXT, ln=1, align="C")
-    pdf.ln(6)
-
-    # Title
+    pdf.set_y(title_y)
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "Roberts Residential LLC Fence Quote", align="C", ln=1)
     pdf.ln(6)
 
+    # ----------------------------
     # Body
+    # ----------------------------
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 8, f"Fence Length: {quote['length_ft']} ft", ln=1)
     pdf.cell(0, 8, f"Fence Height: {quote['height_ft']} ft", ln=1)
@@ -134,13 +127,40 @@ def build_quote_pdf(quote: dict) -> bytes:
 
     pdf.ln(4)
     pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 7, f"Posts: {quote['posts_w']} | Rails: {quote['rails_w']} | Pickets: {quote['pickets_w']}", ln=1)
-    pdf.cell(0, 7, f"Concrete bags: {quote['bags_w']} | Labor: {quote['labor_hrs']:.1f} hrs @ ${quote['labor_rate']:,.2f}/hr", ln=1)
+    pdf.cell(
+        0, 7,
+        f"Posts: {quote['posts_w']} | Rails: {quote['rails_w']} | Pickets: {quote['pickets_w']}",
+        ln=1
+    )
+    pdf.cell(
+        0, 7,
+        f"Concrete bags: {quote['bags_w']} | Labor: {quote['labor_hrs']:.1f} hrs @ ${quote['labor_rate']:,.2f}/hr",
+        ln=1
+    )
 
-    # Rentals line prints ONLY if you explicitly enabled rentals in Admin and they were included
     if quote.get("rental_sell", 0) > 0:
         pdf.cell(0, 7, f"Rentals/Disposal: ${quote['rental_sell']:,.2f}", ln=1)
 
+    # ----------------------------
+    # Bottom note (after body) + Footer contact
+    # ----------------------------
+    # Near-privacy note: place ABOVE footer, but BELOW body content.
+    # set_y with negative values positions relative to bottom of page.
+    pdf.set_y(-38)
+    pdf.set_font("Arial", "I", 10)
+    pdf.multi_cell(
+        0, 6,
+        "Near-privacy wood fences may show small gaps over time due to shrinkage/seasonal movement.",
+        align="C"
+    )
+
+    # Footer: Phone on one line, Email on next (as requested)
+    pdf.set_y(-20)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 5, PHONE_TEXT, ln=1, align="C")
+    pdf.cell(0, 5, EMAIL_TEXT, ln=1, align="C")
+
+    # Output as bytes (works with pyfpdf or fpdf2 return types)
     out = pdf.output(dest="S")
     return out.encode("latin-1") if isinstance(out, str) else bytes(out)
 
