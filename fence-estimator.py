@@ -59,7 +59,8 @@ if st.button("Calculate Quote", type="primary"):
         st.success("PDF downloaded! Email it to the customer right from your phone.")
 
 
-st.caption("Built for Roberts Residential LLC • Dothan, AL • Powered by your in-house crew")
+st.caption("Built for Roberts Residential LLC • Dothan, AL")
+
 
 
 
