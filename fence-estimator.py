@@ -42,7 +42,7 @@ if st.button("Calculate Quote", type="primary"):
     total = round(subtotal * 1.40, 2)
     per_ft = round(total / length_ft, 2)
 
-    st.success(f"Total Installed Price: {$total:,.2f}          (${per_ft:,.2f}/ft)")
+        st.success(f"**Total Installed Price: ${total:,.2f}  (${per_ft:,.2f}/ft)")
     st.write(f"Posts: {posts} | Pickets: {pickets} | Labor: {round(labor_hrs,1)} hrs")
     if demo_old: st.info(f"Demo included: ${round(demo_cost,2)}")
 
@@ -60,6 +60,7 @@ if st.button("Calculate Quote", type="primary"):
 
 
 st.caption("Built for Roberts Residential LLC • Dothan, AL • Powered by your in-house crew")
+
 
 
 
