@@ -1,12 +1,12 @@
-import math
 import os
+import math
 from pathlib import Path
 
 import streamlit as st
 from fpdf import FPDF
 
 # ----------------------------
-# Paths + Contact
+# Paths + Contact (repo-root filenames per your GitHub screenshot)
 # ----------------------------
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -21,22 +21,20 @@ PAGE_ICON = str(LOGO_APP_PATH) if LOGO_APP_PATH.exists() else "🧰"
 # ----------------------------
 # Page setup
 # ----------------------------
-st.set_page_config(
-    page_title="Roberts Fence Estimator",
-    page_icon=PAGE_ICON,  # supports image path or emoji [3](https://github.com/streamlit/streamlit/issues/11370)
-    layout="centered"
-)
-st.title("Fence Estimator")
-st.caption("Contact us at joe@roberts-residential.com or directly at 706-570-6569")
-st.caption("Serving the Greater Dothan & Wiregrass Region")
+st.set_page_config(page_title="Roberts Fence Estimator", page_icon=PAGE_ICON, layout="centered")
+st.title("Roberts Residential, LLC. Fence Estimator")
+st.caption("Dothan, AL")
 
-# Center logo in the app UI
+# Center logo in the Streamlit app UI
 if LOGO_APP_PATH.exists():
     left, mid, right = st.columns([1, 2, 1])
     with mid:
         st.image(str(LOGO_APP_PATH), use_container_width=True)
 else:
-    st.warning(f"Logo not found at: {LOGO_APP_PATH.name}. Make sure it is committed to the repo root.")
+    st.warning(
+        f"Logo not found: {LOGO_APP_PATH.name}. "
+        "Confirm the file exists in the repo root and the filename matches exactly (case-sensitive)."
+    )
 
 # ----------------------------
 # Helpers
@@ -51,37 +49,47 @@ def pickets_per_ft_from_width_gap(picket_width_in: float, gap_in: float) -> floa
     return 12.0 / (picket_width_in + gap_in)
 
 def money_md(x: float) -> str:
-    # Escape $ so Streamlit markdown doesn't treat it as math mode
+    # Escape $ so Streamlit markdown doesn't treat it as math
     return f"\\${x:,.2f}"
 
 def build_quote_pdf(quote: dict) -> bytes:
     pdf = FPDF()
     pdf.add_page()
 
-    # --- PDF Header: centered logo ---
+    # --- PDF Top: Logo (centered) ---
     top_y = 8
     if LOGO_PDF_PATH.exists():
         try:
-            logo_w_mm = 75  # adjust 60–90 as desired
+            logo_w_mm = 75  # tweak 60–90 if desired
             x = (pdf.w - logo_w_mm) / 2.0
             pdf.image(str(LOGO_PDF_PATH), x=x, y=top_y, w=logo_w_mm)
-            pdf.set_y(top_y + 52)
+            pdf.set_y(top_y + 52)  # move below logo
         except Exception:
-            # If the image fails to load for any reason, continue without it
             pdf.set_y(16)
     else:
         pdf.set_y(16)
 
-    # --- Contact lines: phone then email (centered) ---
+    # --- Near-Privacy section (moved ABOVE phone/email/title per your request) ---
+    pdf.set_font("Arial", "I", 10)
+    pdf.multi_cell(
+        0, 6,
+        "Near-privacy wood fences may show small gaps over time due to shrinkage/seasonal movement.",
+        align="C"
+    )
+    pdf.ln(4)
+
+    # --- Phone + Email (moved BELOW Near-Privacy) ---
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 6, PHONE_TEXT, ln=1, align="C")
     pdf.cell(0, 6, EMAIL_TEXT, ln=1, align="C")
-    pdf.ln(4)
+    pdf.ln(6)
 
+    # --- Title (moved BELOW Near-Privacy + contact) ---
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "Roberts Residential LLC Fence Quote", align="C", ln=1)
     pdf.ln(6)
 
+    # --- Body ---
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 8, f"Fence Length: {quote['length_ft']} ft", ln=1)
     pdf.cell(0, 8, f"Fence Height: {quote['height_ft']} ft", ln=1)
@@ -100,19 +108,21 @@ def build_quote_pdf(quote: dict) -> bytes:
 
     pdf.ln(4)
     pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 7, f"Posts: {quote['posts_w']} | Rails: {quote['rails_w']} | Pickets: {quote['pickets_w']}", ln=1)
-    pdf.cell(0, 7, f"Concrete bags: {quote['bags_w']} | Labor: {quote['labor_hrs']:.1f} hrs @ ${quote['labor_rate']:,.2f}/hr", ln=1)
+    pdf.cell(
+        0, 7,
+        f"Posts: {quote['posts_w']} | Rails: {quote['rails_w']} | Pickets: {quote['pickets_w']}",
+        ln=1
+    )
+    pdf.cell(
+        0, 7,
+        f"Concrete bags: {quote['bags_w']} | Labor: {quote['labor_hrs']:.1f} hrs @ ${quote['labor_rate']:,.2f}/hr",
+        ln=1
+    )
 
     if quote["rental_sell"] > 0:
         pdf.cell(0, 7, f"Rentals/Disposal: ${quote['rental_sell']:,.2f}", ln=1)
 
-    pdf.ln(6)
-    pdf.set_font("Arial", "I", 10)
-    pdf.multi_cell(
-        0, 6,
-        "Near-privacy wood fences may show small gaps over time due to shrinkage/seasonal movement."
-    )
-
+    # Output as bytes (works whether FPDF returns str or bytes/bytearray)
     out = pdf.output(dest="S")
     return out.encode("latin-1") if isinstance(out, str) else bytes(out)
 
@@ -157,7 +167,7 @@ with st.sidebar:
     consumables_per_ft = st.number_input("Consumables allowance ($/ft)", min_value=0.0, value=0.30, step=0.05)
 
 # ----------------------------
-# Main form (submit button inside the form) [1](https://codeberg.org/rdwz/gitmoji)
+# Main form (ALL widgets inside + SUBMIT inside)
 # ----------------------------
 with st.form("quote_form"):
     col1, col2 = st.columns(2)
@@ -207,7 +217,7 @@ with st.form("quote_form"):
         if rent_bin:
             bin_rental_cost = st.number_input("Bin rental cost ($)", min_value=0.0, value=250.0, step=10.0)
 
-    submitted = st.form_submit_button("Calculate Quote", type="primary")  # [1](https://codeberg.org/rdwz/gitmoji)
+    submitted = st.form_submit_button("Calculate Quote", type="primary")
 
 # ----------------------------
 # Calculate & render after submit
@@ -224,7 +234,7 @@ if submitted:
     pickets_w = apply_waste_qty(pickets, waste_pct)
     rails_w = apply_waste_qty(rails, waste_pct)
 
-    gate_posts = gates * 2
+    gate_posts = gates * 2  # simple assumption for walk gates
 
     if pier_option == "Standard (2 bags per post)":
         bags_total = posts * 2
@@ -235,7 +245,7 @@ if submitted:
     elif pier_option == "Heavy piers all posts (3 bags per post)":
         bags_total = posts * 3
         bases_total = 0
-    else:
+    else:  # Bracket/base
         bags_total = posts * 2
         bases_total = posts
 
@@ -276,6 +286,15 @@ if submitted:
     per_ft = total / float(length_ft)
 
     st.success(f"**Total Installed Price:** {money_md(total)} ({money_md(per_ft)}/ft)")
+    st.write(
+        f"Sections: {sections} | Posts: {posts_w} | Rails: {rails_w} | Pickets: {pickets_w} | Concrete bags: {bags_w}"
+        + (f" | Bases: {bases_w}" if bases_w else "")
+    )
+    st.write(f"Labor: {labor_hrs:.1f} hrs @ {money_md(labor_rate)}/hr  →  {money_md(labor_sell)}")
+    st.write(
+        f"Materials (sell): {money_md(mat_sell)} | Consumables: {money_md(consumables_cost)}"
+        + (f" | Rentals/Disposal: {money_md(rental_sell)}" if rental_sell else "")
+    )
 
     quote = {
         "length_ft": int(length_ft),
@@ -302,6 +321,6 @@ if submitted:
         data=pdf_bytes,
         file_name="Roberts_Fence_Quote.pdf",
         mime="application/pdf",
-    )  # [2](https://cheat-sheet.streamlit.app/)
+    )
 
 st.caption("Built for Roberts Residential LLC • Dothan, AL")
