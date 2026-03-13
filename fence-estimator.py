@@ -1,35 +1,41 @@
-import os
 import math
+import os
+from pathlib import Path
+
 import streamlit as st
 from fpdf import FPDF
 
 # ----------------------------
-# Logo + Contact (repo-root filenames per your screenshot)
+# Paths + Contact
 # ----------------------------
-LOGO_APP_PATH = "FullLogo_NoBuffer.jpg"
-LOGO_PDF_PATH = "FullLogo_Buffer.jpg"
+BASE_DIR = Path(__file__).resolve().parent
+
+LOGO_APP_PATH = BASE_DIR / "FullLogo_NoBuffer.jpg"
+LOGO_PDF_PATH = BASE_DIR / "FullLogo_Buffer.jpg"
 
 PHONE_TEXT = "Phone: 706-570-6569"
 EMAIL_TEXT = "Email: joe@roberts-residential.com"
 
-PAGE_ICON = LOGO_APP_PATH if os.path.exists(LOGO_APP_PATH) else "🧰"
+PAGE_ICON = str(LOGO_APP_PATH) if LOGO_APP_PATH.exists() else "🧰"
 
 # ----------------------------
 # Page setup
 # ----------------------------
 st.set_page_config(
     page_title="Roberts Fence Estimator",
-    page_icon=PAGE_ICON,   # page_icon supports image paths or emojis [3](https://github.com/streamlit/streamlit/issues/11370)
+    page_icon=PAGE_ICON,  # supports image path or emoji [3](https://github.com/streamlit/streamlit/issues/11370)
     layout="centered"
 )
 st.title("Roberts Residential, LLC. Fence Estimator")
 st.caption("Dothan, AL")
 
 # Center logo in the app UI
-if os.path.exists(LOGO_APP_PATH):
+if LOGO_APP_PATH.exists():
     left, mid, right = st.columns([1, 2, 1])
     with mid:
-        st.image(LOGO_APP_PATH, use_container_width=True)
+        st.image(str(LOGO_APP_PATH), use_container_width=True)
+else:
+    st.warning(f"Logo not found at: {LOGO_APP_PATH.name}. Make sure it is committed to the repo root.")
 
 # ----------------------------
 # Helpers
@@ -51,16 +57,21 @@ def build_quote_pdf(quote: dict) -> bytes:
     pdf = FPDF()
     pdf.add_page()
 
-    # --- PDF Header: centered logo + phone + email (each on its own line) ---
+    # --- PDF Header: centered logo ---
     top_y = 8
-    if os.path.exists(LOGO_PDF_PATH):
-        logo_w_mm = 75  # adjust 60–90 if you want bigger/smaller
-        x = (pdf.w - logo_w_mm) / 2.0
-        pdf.image(LOGO_PDF_PATH, x=x, y=top_y, w=logo_w_mm)
-        pdf.set_y(top_y + 52)  # push content below the logo
+    if LOGO_PDF_PATH.exists():
+        try:
+            logo_w_mm = 75  # adjust 60–90 as desired
+            x = (pdf.w - logo_w_mm) / 2.0
+            pdf.image(str(LOGO_PDF_PATH), x=x, y=top_y, w=logo_w_mm)
+            pdf.set_y(top_y + 52)
+        except Exception:
+            # If the image fails to load for any reason, continue without it
+            pdf.set_y(16)
     else:
         pdf.set_y(16)
 
+    # --- Contact lines: phone then email (centered) ---
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 6, PHONE_TEXT, ln=1, align="C")
     pdf.cell(0, 6, EMAIL_TEXT, ln=1, align="C")
@@ -101,7 +112,6 @@ def build_quote_pdf(quote: dict) -> bytes:
         "Near-privacy wood fences may show small gaps over time due to shrinkage/seasonal movement."
     )
 
-    # FPDF output may be str (pyfpdf) or bytes/bytearray (fpdf2). Handle both.
     out = pdf.output(dest="S")
     return out.encode("latin-1") if isinstance(out, str) else bytes(out)
 
@@ -146,7 +156,7 @@ with st.sidebar:
     consumables_per_ft = st.number_input("Consumables allowance ($/ft)", min_value=0.0, value=0.30, step=0.05)
 
 # ----------------------------
-# Main form (ALL widgets + SUBMIT inside form)
+# Main form (submit button inside the form) [1](https://codeberg.org/rdwz/gitmoji)
 # ----------------------------
 with st.form("quote_form"):
     col1, col2 = st.columns(2)
@@ -162,3 +172,135 @@ with st.form("quote_form"):
         old_concrete = st.checkbox("Old posts are in concrete", value=True) if demo_old else False
 
     st.markdown("### Near-Privacy Takeoff")
+    picket_width_in = st.number_input("Picket width (inches, actual)", min_value=4.0, value=5.5, step=0.1)
+    install_gap_in = st.number_input("Install gap (inches)", min_value=0.0, value=0.125, step=0.025)
+
+    override_ppf = st.checkbox("Override pickets per ft", value=False)
+    ppf_calc = pickets_per_ft_from_width_gap(picket_width_in, install_gap_in)
+    pickets_per_ft = st.number_input("Pickets per ft", min_value=1.5, value=float(ppf_calc), step=0.05) if override_ppf else ppf_calc
+
+    st.markdown("### Rails / Stringers")
+    rails_default = 3 if height_ft == 6 else 4
+    rails_per_section = st.number_input("Rails per 8-ft section", min_value=2, value=int(rails_default), step=1)
+
+    st.markdown("### Concrete / Pier Option")
+    pier_option = st.selectbox(
+        "Concrete option",
+        [
+            "Standard (2 bags per post)",
+            "Heavy gate post piers (4 bags per gate post)",
+            "Heavy piers all posts (3 bags per post)",
+            "Bracket/base on pier (adds post bases)",
+        ],
+        index=0
+    )
+
+    phd_rental_cost = 0.0
+    bin_rental_cost = 0.0
+    if demo_old and old_concrete:
+        st.markdown("### Rentals / Disposal (demo + concrete)")
+        rent_phd = st.checkbox("Rent post hole digger / breaker", value=True)
+        rent_bin = st.checkbox("Rent portable rubbish bin", value=True)
+        if rent_phd:
+            phd_rental_cost = st.number_input("Equipment rental cost ($)", min_value=0.0, value=95.0, step=5.0)
+        if rent_bin:
+            bin_rental_cost = st.number_input("Bin rental cost ($)", min_value=0.0, value=250.0, step=10.0)
+
+    submitted = st.form_submit_button("Calculate Quote", type="primary")  # [1](https://codeberg.org/rdwz/gitmoji)
+
+# ----------------------------
+# Calculate & render after submit
+# ----------------------------
+if submitted:
+    terrain_factor = terrain_factors[terrain]
+
+    sections = ceil_qty(length_ft / 8.0)
+    posts = sections + 1
+    pickets = ceil_qty(length_ft * pickets_per_ft)
+    rails = sections * int(rails_per_section)
+
+    posts_w = apply_waste_qty(posts, waste_pct)
+    pickets_w = apply_waste_qty(pickets, waste_pct)
+    rails_w = apply_waste_qty(rails, waste_pct)
+
+    gate_posts = gates * 2
+
+    if pier_option == "Standard (2 bags per post)":
+        bags_total = posts * 2
+        bases_total = 0
+    elif pier_option == "Heavy gate post piers (4 bags per gate post)":
+        bags_total = (posts - gate_posts) * 2 + gate_posts * 4
+        bases_total = 0
+    elif pier_option == "Heavy piers all posts (3 bags per post)":
+        bags_total = posts * 3
+        bases_total = 0
+    else:
+        bags_total = posts * 2
+        bases_total = posts
+
+    bags_w = apply_waste_qty(bags_total, waste_pct)
+    bases_w = apply_waste_qty(bases_total, waste_pct) if bases_total > 0 else 0
+
+    consumables_cost = 0.0
+    if include_consumables:
+        consumables_cost = (length_ft * consumables_per_ft) * (1.0 + waste_pct)
+
+    mat_cost = (
+        (posts_w * post_cost) +
+        (rails_w * rail_cost) +
+        (pickets_w * picket_cost) +
+        (bags_w * concrete_bag_cost) +
+        (gates * gate_hw_cost) +
+        (bases_w * base_bracket_cost)
+    )
+    mat_sell = mat_cost * mat_markup
+
+    height_factor = 1.0 if height_ft == 6 else float(height_8_multiplier)
+    install_hrs = (length_ft * base_install_hr_per_ft_6 * terrain_factor) * height_factor
+    install_hrs += gates * gate_labor_hrs_each
+
+    demo_hrs = 0.0
+    if demo_old:
+        demo_hrs = length_ft * demo_hr_per_ft
+        if old_concrete:
+            demo_hrs += posts * concrete_post_extra_hr
+
+    labor_hrs = install_hrs + demo_hrs
+    labor_sell = labor_hrs * labor_rate
+
+    rental_total = phd_rental_cost + bin_rental_cost
+    rental_sell = rental_total * rental_markup if rental_total > 0 else 0.0
+
+    total = mat_sell + consumables_cost + labor_sell + rental_sell
+    per_ft = total / float(length_ft)
+
+    st.success(f"**Total Installed Price:** {money_md(total)} ({money_md(per_ft)}/ft)")
+
+    quote = {
+        "length_ft": int(length_ft),
+        "height_ft": int(height_ft),
+        "gates": int(gates),
+        "terrain": terrain,
+        "demo_old": bool(demo_old),
+        "old_concrete": bool(old_concrete),
+        "posts_w": int(posts_w),
+        "rails_w": int(rails_w),
+        "pickets_w": int(pickets_w),
+        "bags_w": int(bags_w),
+        "labor_hrs": float(labor_hrs),
+        "labor_rate": float(labor_rate),
+        "rental_sell": float(rental_sell),
+        "total": float(total),
+        "per_ft": float(per_ft),
+    }
+
+    pdf_bytes = build_quote_pdf(quote)
+
+    st.download_button(
+        label="📄 Download Professional Quote PDF",
+        data=pdf_bytes,
+        file_name="Roberts_Fence_Quote.pdf",
+        mime="application/pdf",
+    )  # [2](https://cheat-sheet.streamlit.app/)
+
+st.caption("Built for Roberts Residential LLC • Dothan, AL")
