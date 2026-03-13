@@ -42,7 +42,7 @@ if st.button("Calculate Quote", type="primary"):
     total = round(subtotal * 1.40, 2)
     per_ft = round(total / length_ft, 2)
 
-    st.success(f"**Total Installed Price: ${total:,}**  (${per_ft}/ft)")
+    st.success(f"**Total Installed Price: ${total:,.2f}**  (${per_ft:,.2f}/ft)")
     st.write(f"Posts: {posts} | Pickets: {pickets} | Labor: {round(labor_hrs,1)} hrs")
     if demo_old: st.info(f"Demo included: ${round(demo_cost,2)}")
 
@@ -57,5 +57,6 @@ if st.button("Calculate Quote", type="primary"):
         pdf.cell(0, 10, f"Per foot: ${per_ft} | Includes full demo & disposal", ln=1)
         pdf.output("Roberts_Fence_Quote.pdf")
         st.success("PDF downloaded! Email it to the customer right from your phone.")
+
 
 st.caption("Built for Roberts Residential LLC • Dothan, AL • Powered by your in-house crew")
