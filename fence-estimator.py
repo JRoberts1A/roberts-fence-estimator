@@ -27,7 +27,7 @@ st.set_page_config(
 
 st.title("Roberts Residential, LLC.")
 st.title("Fence Estimator")
-st.caption("Serving the Greater Dothan Area & Wiregrass Region)
+st.caption("Serving the Greater Dothan Area & Wiregrass Region")
 
 # Center logo in the app UI (customer-facing)
 if LOGO_APP_PATH.exists():
