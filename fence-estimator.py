@@ -80,23 +80,22 @@ def money_md(x: float) -> str:
 
 def build_quote_pdf(quote: dict) -> bytes:
     pdf = FPDF()
-    # Reserve bottom margin space for footer lines
-    pdf.set_auto_page_break(auto=True, margin=22)
+    pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
 
     # ----------------------------
-    # HEADER: Logo + Title (no overlap)
+    # HEADER: Logo + Title (guaranteed no overlap)
     # ----------------------------
     top_y = 8
     title_y = 20  # fallback if no logo
 
     if LOGO_PDF_PATH.exists():
         try:
-            logo_w_mm = 75  # adjust 60–90 as desired
+            logo_w_mm = 75  # adjust 60–90 if desired
             x = (pdf.w - logo_w_mm) / 2.0
             pdf.image(str(LOGO_PDF_PATH), x=x, y=top_y, w=logo_w_mm)
 
-            # Keep title safely below the logo area so it never collides
+            # Force title to start well below the logo block
             title_y = top_y + 58
         except Exception:
             title_y = 20
@@ -142,7 +141,7 @@ def build_quote_pdf(quote: dict) -> bytes:
         pdf.cell(0, 7, f"Rentals/Disposal: ${quote['rental_sell']:,.2f}", ln=1)
 
     # ----------------------------
-    # BODY: Near-privacy note (NOW in the body)
+    # BODY: Near-privacy note (kept in body, near the bottom)
     # ----------------------------
     pdf.ln(6)
     pdf.set_font("Arial", "I", 10)
@@ -152,14 +151,14 @@ def build_quote_pdf(quote: dict) -> bytes:
     )
 
     # ----------------------------
-    # FOOTER: Phone + Email (bottom margin)
+    # BODY: Phone + Email as the LAST items printed
     # ----------------------------
-    pdf.set_y(-22)
+    pdf.ln(6)
     pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 5, PHONE_TEXT, ln=1, align="C")
-    pdf.cell(0, 5, EMAIL_TEXT, ln=1, align="C")
+    pdf.cell(0, 5, PHONE_TEXT, ln=1)
+    pdf.cell(0, 5, EMAIL_TEXT, ln=1)
 
-    # Output as bytes (supports both pyfpdf + fpdf2 behaviors)
+    # Output as bytes (supports pyfpdf and fpdf2)
     out = pdf.output(dest="S")
     return out.encode("latin-1") if isinstance(out, str) else bytes(out)
 
