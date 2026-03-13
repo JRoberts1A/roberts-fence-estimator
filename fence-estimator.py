@@ -155,8 +155,8 @@ def build_quote_pdf(quote: dict) -> bytes:
     # ----------------------------
     pdf.ln(6)
     pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 5, PHONE_TEXT, ln=1, align="C")
-    pdf.cell(0, 5, EMAIL_TEXT, ln=1, align="C")
+    pdf.cell(0, 5, PHONE_TEXT, ln=1)
+    pdf.cell(0, 5, EMAIL_TEXT, ln=1)
 
     # Output as bytes (supports pyfpdf and fpdf2)
     out = pdf.output(dest="S")
