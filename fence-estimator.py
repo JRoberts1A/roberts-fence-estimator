@@ -19,17 +19,12 @@ PAGE_ICON = str(LOGO_APP_PATH) if LOGO_APP_PATH.exists() else "🧰"
 # ============================================================
 # Page setup
 # ============================================================
-st.set_page_config(
-    page_title="Roberts Fence Estimator",
-    page_icon=PAGE_ICON,
-    layout="centered",
-)
+st.set_page_config(page_title="Roberts Fence Estimator", page_icon=PAGE_ICON, layout="centered")
 
-st.title("Roberts Residential, LLC.")
-st.title("Fence Estimator")
-st.caption("Serving the Greater Dothan Area & Wiregrass Region")
+st.title("Roberts Residential, LLC. Fence Estimator")
+st.caption("Dothan, AL")
 
-# Center logo in the app UI (customer-facing)
+# Center logo in the app UI
 if LOGO_APP_PATH.exists():
     left, mid, right = st.columns([1, 2, 1])
     with mid:
@@ -62,9 +57,9 @@ with st.sidebar:
             st.success("Locked.")
 
 # ============================================================
-# Helpers
+# Helpers / Constants
 # ============================================================
-NEAR_PRIVACY_GAP_IN = 0.125  # fixed internal assumption (removed from UI)
+NEAR_PRIVACY_GAP_IN = 0.125  # fixed internal assumption (not exposed)
 
 def ceil_qty(x: float) -> int:
     return int(math.ceil(x))
@@ -76,14 +71,13 @@ def pickets_per_ft_from_width_gap(picket_width_in: float, gap_in: float) -> floa
     return 12.0 / (picket_width_in + gap_in)
 
 def money_md(x: float) -> str:
-    # Escape $ so Streamlit markdown doesn't treat it as math
-    return f"\\${x:,.2f}"
+    return f"\\${x:,.2f}"  # escape for Streamlit markdown
 
 def build_quote_pdf(quote: dict) -> bytes:
     pdf = FPDF()
     pdf.add_page()
 
-    # --- 1) Logo (centered) ---
+    # Logo
     top_y = 8
     if LOGO_PDF_PATH.exists():
         try:
@@ -96,7 +90,7 @@ def build_quote_pdf(quote: dict) -> bytes:
     else:
         pdf.set_y(16)
 
-    # --- 2) Near-privacy note (ABOVE contact/title as requested) ---
+    # Near-privacy note (above contact/title)
     pdf.set_font("Arial", "I", 10)
     pdf.multi_cell(
         0, 6,
@@ -105,13 +99,13 @@ def build_quote_pdf(quote: dict) -> bytes:
     )
     pdf.ln(4)
 
-    # --- 3) Phone, 4) Email (centered lines) ---
+    # Phone / email
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 6, PHONE_TEXT, ln=1, align="C")
     pdf.cell(0, 6, EMAIL_TEXT, ln=1, align="C")
     pdf.ln(6)
 
-    # --- 5) Title ---
+    # Title
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "Roberts Residential LLC Fence Quote", align="C", ln=1)
     pdf.ln(6)
@@ -144,9 +138,8 @@ def build_quote_pdf(quote: dict) -> bytes:
     return out.encode("latin-1") if isinstance(out, str) else bytes(out)
 
 # ============================================================
-# Defaults (Customer mode) vs Admin controls
+# Defaults (Customer mode)
 # ============================================================
-# Customer mode defaults
 labor_rate = 65.0
 waste_pct = 0.10
 
@@ -158,6 +151,7 @@ demo_hr_per_ft = 0.12
 concrete_post_extra_hr = 0.75
 
 terrain_factors = {"Flat": 1.0, "Sloped/Hilly": 1.25, "Rocky": 1.50}
+terrain = "Flat"  # CUSTOMER DEFAULT (admin can change)
 
 mat_markup = 1.15
 rental_markup = 1.10
@@ -167,21 +161,21 @@ rail_cost = 7.25
 picket_cost = 3.98
 concrete_bag_cost = 4.38
 gate_hw_cost = 37.98
-
-# Requirement #5: base/bracket default $22/unit (admin adjustable)
-base_bracket_cost = 22.00
+base_bracket_cost = 22.00  # per your request
 
 include_consumables = True
 consumables_per_ft = 0.30
 
-# Admin-only: picket width selection (5.5 or 6.0)
-picket_width_in = 5.5  # default
-# Admin-only rentals toggles & costs
+picket_width_in = 5.5  # admin selection (5.5 or 6.0)
+
 enable_equipment_rental = True
 equipment_rental_cost = 95.0
 enable_bin_rental = True
 bin_rental_cost = 250.0
 
+# ============================================================
+# Admin-only controls (includes Terrain now)
+# ============================================================
 if st.session_state.is_admin:
     with st.sidebar:
         st.markdown("## Assumptions (Admin)")
@@ -189,23 +183,18 @@ if st.session_state.is_admin:
         labor_rate = st.number_input("All-in Billable Labor Rate ($/hr)", min_value=1.0, value=float(labor_rate), step=1.0)
         waste_pct = st.slider("Waste % (materials/consumables)", 0, 25, int(waste_pct * 100)) / 100.0
 
-        st.subheader("Pickets (Admin)")
+        st.subheader("Terrain (Admin-only)")
+        terrain = st.selectbox("Terrain", ["Flat", "Sloped/Hilly", "Rocky"], index=0)
+
+        st.subheader("Pickets (Admin-only)")
         picket_width_in = st.selectbox("Picket width (inches)", options=[5.5, 6.0], index=0)
 
         st.subheader("Production (Admin)")
         base_install_hr_per_ft_6 = st.number_input("Install hrs/ft (6 ft)", min_value=0.05, value=float(base_install_hr_per_ft_6), step=0.01)
         height_8_multiplier = st.number_input("8 ft labor multiplier", min_value=1.00, value=float(height_8_multiplier), step=0.05)
         gate_labor_hrs_each = st.number_input("Gate labor add (hrs per gate)", min_value=0.0, value=float(gate_labor_hrs_each), step=0.5)
-
         demo_hr_per_ft = st.number_input("Demo base (hrs/ft)", min_value=0.0, value=float(demo_hr_per_ft), step=0.01)
         concrete_post_extra_hr = st.number_input("Concrete post extra (hrs/post)", min_value=0.0, value=float(concrete_post_extra_hr), step=0.05)
-
-        st.subheader("Terrain factors (Admin)")
-        terrain_factors = {
-            "Flat": st.number_input("Flat factor", min_value=0.5, value=float(terrain_factors["Flat"]), step=0.05),
-            "Sloped/Hilly": st.number_input("Sloped/Hilly factor", min_value=0.5, value=float(terrain_factors["Sloped/Hilly"]), step=0.05),
-            "Rocky": st.number_input("Rocky factor", min_value=0.5, value=float(terrain_factors["Rocky"]), step=0.05),
-        }
 
         st.subheader("Pricing (Admin)")
         mat_markup = st.number_input("Materials markup (1.15 = 15%)", min_value=1.0, value=float(mat_markup), step=0.01)
@@ -217,7 +206,6 @@ if st.session_state.is_admin:
         picket_cost = st.number_input("Dog-ear picket cost ($ each)", min_value=0.0, value=float(picket_cost), step=0.05)
         concrete_bag_cost = st.number_input("Concrete bag (50-lb) cost ($)", min_value=0.0, value=float(concrete_bag_cost), step=0.05)
         gate_hw_cost = st.number_input("Gate hardware kit cost ($ each)", min_value=0.0, value=float(gate_hw_cost), step=0.50)
-
         base_bracket_cost = st.number_input("Bracket/Base unit cost ($ each)", min_value=0.0, value=float(base_bracket_cost), step=0.50)
 
         st.subheader("Consumables (Admin)")
@@ -232,7 +220,7 @@ if st.session_state.is_admin:
         bin_rental_cost = st.number_input("Bin rental cost ($)", min_value=0.0, value=float(bin_rental_cost), step=10.0)
 
 # ============================================================
-# Customer-facing Quote Form
+# Customer-facing Quote Form (Terrain removed)
 # ============================================================
 st.markdown("### Get Your Fence Quote")
 
@@ -245,7 +233,6 @@ with st.form("quote_form"):
         gates = st.number_input("Number of Gates", min_value=0, value=1, step=1)
 
     with col2:
-        terrain = st.selectbox("Terrain", ["Flat", "Sloped/Hilly", "Rocky"])
         demo_old = st.checkbox("Include Demo & Removal of Old Fence", value=True)
         old_concrete = st.checkbox("Old posts are in concrete", value=True) if demo_old else False
 
@@ -261,22 +248,22 @@ with st.form("quote_form"):
         index=0
     )
 
-    submitted = st.form_submit_button("Calculate Quote", type="primary")  # forms require this inside form
+    submitted = st.form_submit_button("Calculate Quote", type="primary")
 
 # ============================================================
 # Calculate & Results
 # ============================================================
 if submitted:
-    terrain_factor = terrain_factors[terrain]
+    terrain_factor = terrain_factors.get(terrain, 1.0)
 
-    # Rails rule (#4): 3 rails for 6ft, 4 rails for 8ft
+    # Rails fixed: 3 rails for 6ft, 4 rails for 8ft
     rails_per_section = 3 if height_ft == 6 else 4
 
     sections = ceil_qty(length_ft / 8.0)
     posts = sections + 1
     rails = sections * rails_per_section
 
-    # Pickets per foot uses ADMIN picket width + fixed internal gap (#2, #3)
+    # Pickets per foot uses admin picket width + fixed gap
     ppf = pickets_per_ft_from_width_gap(picket_width_in, NEAR_PRIVACY_GAP_IN)
     pickets = ceil_qty(length_ft * ppf)
 
@@ -308,7 +295,7 @@ if submitted:
     if include_consumables:
         consumables_cost = (length_ft * consumables_per_ft) * (1.0 + waste_pct)
 
-    # Materials cost (then markup)
+    # Materials + markup
     mat_cost = (
         (posts_w * post_cost) +
         (rails_w * rail_cost) +
@@ -319,7 +306,7 @@ if submitted:
     )
     mat_sell = mat_cost * mat_markup
 
-    # Labor (billable rate; no double-markup)
+    # Labor
     height_factor = 1.0 if height_ft == 6 else float(height_8_multiplier)
     install_hrs = (length_ft * base_install_hr_per_ft_6 * terrain_factor) * height_factor
     install_hrs += gates * gate_labor_hrs_each
@@ -333,9 +320,9 @@ if submitted:
     labor_hrs = install_hrs + demo_hrs
     labor_sell = labor_hrs * labor_rate
 
-    # Rentals admin-only (#6): apply only when demo + concrete are selected
+    # Rentals: apply ONLY when admin is unlocked + demo+concrete
     rental_total = 0.0
-    if demo_old and old_concrete:
+    if st.session_state.is_admin and demo_old and old_concrete:
         if enable_equipment_rental:
             rental_total += equipment_rental_cost
         if enable_bin_rental:
@@ -345,7 +332,6 @@ if submitted:
     total = mat_sell + consumables_cost + labor_sell + rental_sell
     per_ft = total / float(length_ft)
 
-    # Customer-facing results
     st.success(f"**Total Installed Price:** {money_md(total)} ({money_md(per_ft)}/ft)")
 
     st.markdown("### What’s Included")
@@ -356,7 +342,6 @@ if submitted:
         "- Wood may shrink and small gaps may appear over time"
     )
 
-    # Build PDF + Download
     quote = {
         "length_ft": int(length_ft),
         "height_ft": int(height_ft),
