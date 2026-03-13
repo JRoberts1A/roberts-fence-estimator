@@ -1,5 +1,6 @@
 import math
 from pathlib import Path
+from datetime import date, timedelta
 
 import streamlit as st
 from fpdf import FPDF
@@ -21,14 +22,13 @@ PAGE_ICON = str(LOGO_APP_PATH) if LOGO_APP_PATH.exists() else "🧰"
 # ============================================================
 st.set_page_config(
     page_title="Roberts Fence Estimator",
-    page_icon=PAGE_ICON,  # supports image path or emoji [3](https://github.com/streamlit/streamlit/issues/11370)
-    layout="centered",
+    page_icon=PAGE_ICON,   # image path or emoji supported [3](https://github.com/streamlit/streamlit/issues/11370)
+    layout="centered"
 )
+st.title("Roberts Residential, LLC. Fence Estimator")
+st.caption("Dothan, AL")
 
-st.title("Roberts Residential, LLC.")
-st.caption("Serving the Greater Dothan Area & Wiregrass Region")
-
-# Center logo in the app UI
+# Center logo in app
 if LOGO_APP_PATH.exists():
     left, mid, right = st.columns([1, 2, 1])
     with mid:
@@ -42,6 +42,7 @@ if "is_admin" not in st.session_state:
 
 def unlock_admin(pin: str) -> bool:
     expected = st.secrets.get("ADMIN_PIN", "")
+    # Safer for public app: if no secret configured, never unlock
     if not expected:
         return False
     return pin == expected
@@ -64,6 +65,7 @@ with st.sidebar:
 # Helpers / Constants
 # ============================================================
 NEAR_PRIVACY_GAP_IN = 0.125  # fixed internal assumption (not exposed)
+QUOTE_VALID_DAYS_DEFAULT = 30  # admin-editable
 
 def ceil_qty(x: float) -> int:
     return int(math.ceil(x))
@@ -75,38 +77,88 @@ def pickets_per_ft_from_width_gap(picket_width_in: float, gap_in: float) -> floa
     return 12.0 / (picket_width_in + gap_in)
 
 def money_md(x: float) -> str:
-    # Escape $ for Streamlit markdown
+    # Escape $ so Streamlit markdown doesn't treat it as math
     return f"\\${x:,.2f}"
 
+# ============================================================
+# Scope Notes Defaults (Warranty intentionally silent)
+# Implementation #2: Admin editable via sidebar text areas
+# ============================================================
+DEFAULT_SCOPE_INCLUDED = [
+    "Layout and standard string-line alignment.",
+    "Standard post spacing (typically 8 ft on center) unless noted otherwise.",
+    "Post holes dug and posts set in concrete (standard 2 bags/post unless upgraded).",
+    "Rails/stringers installed (3 rails @ 6 ft height; 4 rails @ 8 ft height).",
+    "Dog-ear pickets installed in a near-privacy configuration.",
+    "Gate installation per selection (standard hardware included).",
+    "Standard fasteners/consumables allowance (nails/fasteners, blades, small materials).",
+    "Basic jobsite cleanup and removal of typical construction debris."
+]
+
+DEFAULT_SCOPE_EXCLUDED = [
+    "Haul-off/Disposal is an optional add-on when Demo & Removal is selected (priced separately).",
+    "Painting, staining, sealing, or pressure washing unless specifically quoted.",
+    "Permits, HOA approvals, surveys, or property-line dispute resolution.",
+    "Utility mark-out delays; repairs to damaged utilities/irrigation are not included.",
+    "Rock excavation, root removal, buried debris, or unforeseen subsurface conditions (change order if encountered).",
+    "Concrete/brick/stone demolition beyond standard fence removal unless explicitly included.",
+    "Landscaping restoration (sod, plants, mulch) unless included in scope.",
+    "Custom gates, steel frames, upgraded hardware, or specialty materials unless quoted."
+]
+
+DEFAULT_TERMS = [
+    "Quote is valid for the period shown on this document.",
+    "Schedule is subject to material availability and weather conditions.",
+    "Customer is responsible for confirming property lines, easements, and HOA requirements."
+]
+
+# ============================================================
+# PDF Builder
+# - Logo + title safe spacing (title won't collide with logo)
+# - Divider line
+# - Quote date / valid through
+# - Detailed scope notes
+# - Near-privacy note in body
+# - Phone/Email last items printed in body
+# - Haul-off line uses requested wording
+# ============================================================
 def build_quote_pdf(quote: dict) -> bytes:
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
 
     # ----------------------------
-    # HEADER: Logo + Title (guaranteed no overlap)
+    # Header: Logo + Title (no overlap)
     # ----------------------------
     top_y = 8
     title_y = 20  # fallback if no logo
 
     if LOGO_PDF_PATH.exists():
         try:
-            logo_w_mm = 75  # adjust 60–90 if desired
+            logo_w_mm = 75
             x = (pdf.w - logo_w_mm) / 2.0
             pdf.image(str(LOGO_PDF_PATH), x=x, y=top_y, w=logo_w_mm)
-
-            # Force title to start well below the logo block
-            title_y = top_y + 58
+            title_y = top_y + 58  # force title safely below logo block
         except Exception:
             title_y = 20
 
     pdf.set_y(title_y)
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "Roberts Residential LLC Fence Quote", align="C", ln=1)
-    pdf.ln(6)
+
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 6, f"Quote Date: {quote.get('quote_date','')}", align="C", ln=1)
+    pdf.cell(0, 6, f"Valid Through: {quote.get('valid_through','')}", align="C", ln=1)
+
+    # Divider line
+    pdf.ln(3)
+    y = pdf.get_y()
+    pdf.set_draw_color(200, 200, 200)
+    pdf.line(10, y, pdf.w - 10, y)
+    pdf.ln(8)
 
     # ----------------------------
-    # BODY: Quote details
+    # Body: Details
     # ----------------------------
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 8, f"Fence Length: {quote['length_ft']} ft", ln=1)
@@ -116,6 +168,7 @@ def build_quote_pdf(quote: dict) -> bytes:
     pdf.cell(0, 8, f"Demo & Removal: {'Yes' if quote['demo_old'] else 'No'}", ln=1)
     if quote["demo_old"]:
         pdf.cell(0, 8, f"Old posts in concrete: {'Yes' if quote['old_concrete'] else 'No'}", ln=1)
+        pdf.cell(0, 8, f"Haul-off/Disposal add-on: {'Yes' if quote.get('haul_off_selected', False) else 'No'}", ln=1)
 
     pdf.ln(6)
     pdf.set_font("Arial", "B", 13)
@@ -126,23 +179,46 @@ def build_quote_pdf(quote: dict) -> bytes:
 
     pdf.ln(4)
     pdf.set_font("Arial", "", 11)
-    pdf.cell(
-        0, 7,
-        f"Posts: {quote['posts_w']} | Rails: {quote['rails_w']} | Pickets: {quote['pickets_w']}",
-        ln=1
-    )
-    pdf.cell(
-        0, 7,
-        f"Concrete bags: {quote['bags_w']} | Labor: {quote['labor_hrs']:.1f} hrs @ ${quote['labor_rate']:,.2f}/hr",
-        ln=1
-    )
+    pdf.cell(0, 7, f"Posts: {quote['posts_w']} | Rails: {quote['rails_w']} | Pickets: {quote['pickets_w']}", ln=1)
+    pdf.cell(0, 7, f"Concrete bags: {quote['bags_w']} | Labor: {quote['labor_hrs']:.1f} hrs @ ${quote['labor_rate']:,.2f}/hr", ln=1)
 
+    # Haul-off wording as requested
+    if quote.get("haul_off_sell", 0) > 0:
+        pdf.cell(
+            0, 7,
+            f"Haul-off/Disposal: removal and disposal of demo debris — ${quote['haul_off_sell']:,.2f}",
+            ln=1
+        )
+
+    # Rentals line prints only if Admin enabled and included
     if quote.get("rental_sell", 0) > 0:
         pdf.cell(0, 7, f"Rentals/Disposal: ${quote['rental_sell']:,.2f}", ln=1)
 
     # ----------------------------
-    # BODY: Near-privacy note (kept in body, near the bottom)
+    # Scope notes (Admin editable)
     # ----------------------------
+    pdf.ln(8)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "What's Included", ln=1)
+    pdf.set_font("Arial", "", 11)
+    for item in quote.get("scope_included", []):
+        pdf.multi_cell(0, 6, f"- {item}")
+
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Exclusions / Assumptions", ln=1)
+    pdf.set_font("Arial", "", 11)
+    for item in quote.get("scope_excluded", []):
+        pdf.multi_cell(0, 6, f"- {item}")
+
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Terms", ln=1)
+    pdf.set_font("Arial", "", 11)
+    for item in quote.get("terms", []):
+        pdf.multi_cell(0, 6, f"- {item}")
+
+    # Near-privacy note in body
     pdf.ln(6)
     pdf.set_font("Arial", "I", 10)
     pdf.multi_cell(
@@ -150,25 +226,22 @@ def build_quote_pdf(quote: dict) -> bytes:
         "Near-privacy wood fences may show small gaps over time due to shrinkage/seasonal movement."
     )
 
-    # ----------------------------
-    # BODY: Phone + Email as the LAST items printed
-    # ----------------------------
+    # Phone/Email LAST items printed in body
     pdf.ln(6)
     pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 5, PHONE_TEXT, ln=1)
-    pdf.cell(0, 5, EMAIL_TEXT, ln=1)
+    pdf.cell(0, 5, PHONE_TEXT, ln=1, align="C")
+    pdf.cell(0, 5, EMAIL_TEXT, ln=1, align="C")
 
-    # Output as bytes (supports pyfpdf and fpdf2)
     out = pdf.output(dest="S")
     return out.encode("latin-1") if isinstance(out, str) else bytes(out)
 
 # ============================================================
 # Defaults (Customer mode)
 # ============================================================
-# ✅ Change #1: default labor rate is now $45/hr
+# Default labor rate reduced to $45/hr
 labor_rate = 45.0
-waste_pct = 0.10
 
+waste_pct = 0.10
 base_install_hr_per_ft_6 = 0.22
 height_8_multiplier = 1.15
 gate_labor_hrs_each = 3.0
@@ -176,32 +249,42 @@ gate_labor_hrs_each = 3.0
 demo_hr_per_ft = 0.12
 concrete_post_extra_hr = 0.75
 
+# Terrain is Admin-only (customer default)
 terrain_factors = {"Flat": 1.0, "Sloped/Hilly": 1.25, "Rocky": 1.50}
-terrain = "Flat"  # customer default (admin can change)
+terrain = "Flat"
 
 mat_markup = 1.15
-rental_markup = 1.10
+rental_markup = 1.10  # admin-only and not assumed
 
 post_cost = 18.50
 rail_cost = 7.25
 picket_cost = 3.98
 concrete_bag_cost = 4.38
 gate_hw_cost = 37.98
+
+# Bracket/Base default $22
 base_bracket_cost = 22.00
 
 include_consumables = True
 consumables_per_ft = 0.30
 
-picket_width_in = 5.5  # admin selection (5.5 or 6.0)
+# Admin-only picket width selection (5.5 or 6.0)
+picket_width_in = 5.5
 
-# ✅ Change #2: rentals are NOT assumed; defaults OFF
+# Rentals: NOT assumed; admin-only defaults OFF
 enable_equipment_rental = False
 equipment_rental_cost = 95.0
 enable_bin_rental = False
 bin_rental_cost = 250.0
 
+# Haul-off/disposal add-on: customer selects, admin sets price
+haul_off_cost = 250.0
+haul_off_markup = 1.10
+
+quote_valid_days = QUOTE_VALID_DAYS_DEFAULT
+
 # ============================================================
-# Admin-only controls (includes Terrain, picket width, rentals)
+# Admin-only controls (Terrain, picket width, scope notes, costs)
 # ============================================================
 if st.session_state.is_admin:
     with st.sidebar:
@@ -223,9 +306,12 @@ if st.session_state.is_admin:
         demo_hr_per_ft = st.number_input("Demo base (hrs/ft)", min_value=0.0, value=float(demo_hr_per_ft), step=0.01)
         concrete_post_extra_hr = st.number_input("Concrete post extra (hrs/post)", min_value=0.0, value=float(concrete_post_extra_hr), step=0.05)
 
+        st.subheader("PDF (Admin)")
+        quote_valid_days = st.number_input("Quote valid (days)", min_value=1, value=int(quote_valid_days), step=1)
+
         st.subheader("Pricing (Admin)")
         mat_markup = st.number_input("Materials markup (1.15 = 15%)", min_value=1.0, value=float(mat_markup), step=0.01)
-        rental_markup = st.number_input("Rentals/Disposal handling (1.10 = 10%)", min_value=1.0, value=float(rental_markup), step=0.01)
+        rental_markup = st.number_input("Rentals handling (1.10 = 10%)", min_value=1.0, value=float(rental_markup), step=0.01)
 
         st.subheader("Unit costs (Admin)")
         post_cost = st.number_input("Post cost ($ each)", min_value=0.0, value=float(post_cost), step=0.25)
@@ -246,10 +332,46 @@ if st.session_state.is_admin:
         enable_bin_rental = st.checkbox("Include bin rental", value=enable_bin_rental)
         bin_rental_cost = st.number_input("Bin rental cost ($)", min_value=0.0, value=float(bin_rental_cost), step=10.0)
 
+        st.subheader("Haul-off / Disposal (Admin)")
+        st.caption("Customer can choose haul-off when Demo is selected; price controlled here.")
+        haul_off_cost = st.number_input("Haul-off/disposal base cost ($)", min_value=0.0, value=float(haul_off_cost), step=10.0)
+        haul_off_markup = st.number_input("Haul-off markup (1.10 = 10%)", min_value=1.0, value=float(haul_off_markup), step=0.01)
+
+        # Implementation #2: Admin editable scope notes
+        st.subheader("PDF Scope Notes (Admin)")
+        included_text = st.text_area(
+            "What's Included (one bullet per line)",
+            value="\n".join(DEFAULT_SCOPE_INCLUDED),
+            height=170
+        )
+        excluded_text = st.text_area(
+            "Exclusions / Assumptions (one bullet per line)",
+            value="\n".join(DEFAULT_SCOPE_EXCLUDED),
+            height=170
+        )
+        terms_text = st.text_area(
+            "Terms (one bullet per line)",
+            value="\n".join(DEFAULT_TERMS),
+            height=130
+        )
+
+        scope_included = [line.strip() for line in included_text.splitlines() if line.strip()]
+        scope_excluded = [line.strip() for line in excluded_text.splitlines() if line.strip()]
+        terms = [line.strip() for line in terms_text.splitlines() if line.strip()]
+else:
+    # Customer mode scope notes (defaults)
+    scope_included = DEFAULT_SCOPE_INCLUDED
+    scope_excluded = DEFAULT_SCOPE_EXCLUDED
+    terms = DEFAULT_TERMS
+
 # ============================================================
-# Customer-facing Quote Form (Terrain removed; rentals removed)
+# Customer-facing Quote Form
+# - Terrain hidden (admin-only)
+# - Rentals hidden (admin-only)
+# - Haul-off appears only when Demo selected (extra)
+# - Enforce demo required if haul-off selected (validation)
 # ============================================================
-st.markdown("### Free Fence Install Estimator")
+st.markdown("### Get Your Fence Quote")
 
 with st.form("quote_form"):
     col1, col2 = st.columns(2)
@@ -263,6 +385,13 @@ with st.form("quote_form"):
         demo_old = st.checkbox("Include Demo & Removal of Old Fence", value=True)
         old_concrete = st.checkbox("Old posts are in concrete", value=True) if demo_old else False
 
+    # Haul-off/disposal add-on (extra)
+    haul_off_selected = False
+    if demo_old:
+        haul_off_selected = st.checkbox("Add haul-off/disposal (extra)", value=False)
+    else:
+        haul_off_selected = False  # cannot be true if demo isn't selected
+
     st.markdown("### Concrete Option")
     pier_option = st.selectbox(
         "Concrete option",
@@ -275,26 +404,33 @@ with st.form("quote_form"):
         index=0
     )
 
-    # Submit button must be inside the form [1](https://codeberg.org/rdwz/gitmoji)
+    # Streamlit forms require a submit button inside the form [1](https://codeberg.org/rdwz/gitmoji)
     submitted = st.form_submit_button("Calculate Quote", type="primary")
 
 # ============================================================
 # Calculate & Results
 # ============================================================
 if submitted:
+    # Enforce: Demo must be selected if haul-off is selected
+    if haul_off_selected and not demo_old:
+        st.error("To select haul-off/disposal, 'Include Demo & Removal of Old Fence' must also be selected.")
+        st.stop()
+
     terrain_factor = terrain_factors.get(terrain, 1.0)
 
-    # Rails fixed: 3 rails for 6ft, 4 rails for 8ft
+    # Rails fixed automatically
     rails_per_section = 3 if height_ft == 6 else 4
 
+    # Basic takeoff
     sections = ceil_qty(length_ft / 8.0)
     posts = sections + 1
     rails = sections * rails_per_section
 
-    # Pickets per foot uses admin picket width + fixed near-privacy gap
+    # Pickets based on admin picket width + fixed near-privacy gap
     ppf = pickets_per_ft_from_width_gap(picket_width_in, NEAR_PRIVACY_GAP_IN)
     pickets = ceil_qty(length_ft * ppf)
 
+    # Waste on quantities
     posts_w = apply_waste_qty(posts, waste_pct)
     rails_w = apply_waste_qty(rails, waste_pct)
     pickets_w = apply_waste_qty(pickets, waste_pct)
@@ -348,7 +484,12 @@ if submitted:
     labor_hrs = install_hrs + demo_hrs
     labor_sell = labor_hrs * labor_rate
 
-    # Rentals: not assumed; ONLY included if admin unlocked + enabled + demo+concrete
+    # Haul-off/disposal add-on (extra)
+    haul_off_sell = 0.0
+    if demo_old and haul_off_selected:
+        haul_off_sell = float(haul_off_cost) * float(haul_off_markup)
+
+    # Rentals NOT assumed — admin-only and requires unlock + enable + demo+concrete
     rental_total = 0.0
     if st.session_state.is_admin and demo_old and old_concrete:
         if enable_equipment_rental:
@@ -357,18 +498,24 @@ if submitted:
             rental_total += bin_rental_cost
     rental_sell = rental_total * rental_markup if rental_total > 0 else 0.0
 
-    total = mat_sell + consumables_cost + labor_sell + rental_sell
+    total = mat_sell + consumables_cost + labor_sell + haul_off_sell + rental_sell
     per_ft = total / float(length_ft)
 
+    # Customer-facing output (simple)
     st.success(f"**Total Installed Price:** {money_md(total)} ({money_md(per_ft)}/ft)")
 
     st.markdown("### What’s Included")
     st.markdown(
         "- Materials and professional installation (dog-ear near-privacy)\n"
         "- Standard concrete set per post (2 bags/post) unless upgraded\n"
-        "- Cleanup and haul-off (when demo is selected)\n"
+        "- Demo & Removal (when selected)\n"
+        "- Haul-off/disposal available as an add-on when demo is selected\n"
         "- Wood may shrink and small gaps may appear over time"
     )
+
+    # Quote dates
+    quote_date_val = date.today()
+    valid_through_val = quote_date_val + timedelta(days=int(quote_valid_days))
 
     quote = {
         "length_ft": int(length_ft),
@@ -377,15 +524,29 @@ if submitted:
         "terrain": terrain,
         "demo_old": bool(demo_old),
         "old_concrete": bool(old_concrete),
+
+        "haul_off_selected": bool(haul_off_selected),
+        "haul_off_sell": float(haul_off_sell),
+
         "posts_w": int(posts_w),
         "rails_w": int(rails_w),
         "pickets_w": int(pickets_w),
         "bags_w": int(bags_w),
+
         "labor_hrs": float(labor_hrs),
         "labor_rate": float(labor_rate),
+
         "rental_sell": float(rental_sell),
+
         "total": float(total),
         "per_ft": float(per_ft),
+
+        "quote_date": quote_date_val.strftime("%b %d, %Y"),
+        "valid_through": valid_through_val.strftime("%b %d, %Y"),
+
+        "scope_included": scope_included,
+        "scope_excluded": scope_excluded,
+        "terms": terms,
     }
 
     pdf_bytes = build_quote_pdf(quote)
