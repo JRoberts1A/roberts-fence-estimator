@@ -27,7 +27,7 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("Roberts Residential, LLC. Fence Estimator")
+st.title("Sarah's Backyard Fencer")
 st.caption("Dothan, AL")
 
 # Center logo in app
