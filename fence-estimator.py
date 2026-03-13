@@ -47,4 +47,3 @@ bags_w = math.ceil(bags_total * (1 + WASTE))
 
 # Consumables
 consumables_cost = (length_ft * CONSUMABLES_PER_FT) * (1 + WASTE)
-``
