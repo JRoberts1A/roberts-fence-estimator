@@ -19,7 +19,11 @@ PAGE_ICON = str(LOGO_APP_PATH) if LOGO_APP_PATH.exists() else "🧰"
 # ============================================================
 # Page setup
 # ============================================================
-st.set_page_config(page_title="Roberts Fence Estimator", page_icon=PAGE_ICON, layout="centered")
+st.set_page_config(
+    page_title="Roberts Fence Estimator",
+    page_icon=PAGE_ICON,  # supports image path or emoji [3](https://github.com/streamlit/streamlit/issues/11370)
+    layout="centered",
+)
 
 st.title("Roberts Residential, LLC. Fence Estimator")
 st.caption("Dothan, AL")
@@ -71,7 +75,8 @@ def pickets_per_ft_from_width_gap(picket_width_in: float, gap_in: float) -> floa
     return 12.0 / (picket_width_in + gap_in)
 
 def money_md(x: float) -> str:
-    return f"\\${x:,.2f}"  # escape for Streamlit markdown
+    # Escape $ for Streamlit markdown
+    return f"\\${x:,.2f}"
 
 def build_quote_pdf(quote: dict) -> bytes:
     pdf = FPDF()
@@ -131,7 +136,9 @@ def build_quote_pdf(quote: dict) -> bytes:
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 7, f"Posts: {quote['posts_w']} | Rails: {quote['rails_w']} | Pickets: {quote['pickets_w']}", ln=1)
     pdf.cell(0, 7, f"Concrete bags: {quote['bags_w']} | Labor: {quote['labor_hrs']:.1f} hrs @ ${quote['labor_rate']:,.2f}/hr", ln=1)
-    if quote["rental_sell"] > 0:
+
+    # Rentals line prints ONLY if you explicitly enabled rentals in Admin and they were included
+    if quote.get("rental_sell", 0) > 0:
         pdf.cell(0, 7, f"Rentals/Disposal: ${quote['rental_sell']:,.2f}", ln=1)
 
     out = pdf.output(dest="S")
@@ -140,7 +147,8 @@ def build_quote_pdf(quote: dict) -> bytes:
 # ============================================================
 # Defaults (Customer mode)
 # ============================================================
-labor_rate = 65.0
+# ✅ Change #1: default labor rate is now $45/hr
+labor_rate = 45.0
 waste_pct = 0.10
 
 base_install_hr_per_ft_6 = 0.22
@@ -151,7 +159,7 @@ demo_hr_per_ft = 0.12
 concrete_post_extra_hr = 0.75
 
 terrain_factors = {"Flat": 1.0, "Sloped/Hilly": 1.25, "Rocky": 1.50}
-terrain = "Flat"  # CUSTOMER DEFAULT (admin can change)
+terrain = "Flat"  # customer default (admin can change)
 
 mat_markup = 1.15
 rental_markup = 1.10
@@ -161,20 +169,21 @@ rail_cost = 7.25
 picket_cost = 3.98
 concrete_bag_cost = 4.38
 gate_hw_cost = 37.98
-base_bracket_cost = 22.00  # per your request
+base_bracket_cost = 22.00
 
 include_consumables = True
 consumables_per_ft = 0.30
 
 picket_width_in = 5.5  # admin selection (5.5 or 6.0)
 
-enable_equipment_rental = True
+# ✅ Change #2: rentals are NOT assumed; defaults OFF
+enable_equipment_rental = False
 equipment_rental_cost = 95.0
-enable_bin_rental = True
+enable_bin_rental = False
 bin_rental_cost = 250.0
 
 # ============================================================
-# Admin-only controls (includes Terrain now)
+# Admin-only controls (includes Terrain, picket width, rentals)
 # ============================================================
 if st.session_state.is_admin:
     with st.sidebar:
@@ -213,14 +222,14 @@ if st.session_state.is_admin:
         consumables_per_ft = st.number_input("Consumables allowance ($/ft)", min_value=0.0, value=float(consumables_per_ft), step=0.05)
 
         st.subheader("Rentals (Admin-only)")
-        st.caption("Applied only when Demo + Concrete are selected.")
+        st.caption("Not assumed in customer quotes. Enable only when applicable.")
         enable_equipment_rental = st.checkbox("Include equipment rental", value=enable_equipment_rental)
         equipment_rental_cost = st.number_input("Equipment rental cost ($)", min_value=0.0, value=float(equipment_rental_cost), step=5.0)
         enable_bin_rental = st.checkbox("Include bin rental", value=enable_bin_rental)
         bin_rental_cost = st.number_input("Bin rental cost ($)", min_value=0.0, value=float(bin_rental_cost), step=10.0)
 
 # ============================================================
-# Customer-facing Quote Form (Terrain removed)
+# Customer-facing Quote Form (Terrain removed; rentals removed)
 # ============================================================
 st.markdown("### Get Your Fence Quote")
 
@@ -248,6 +257,7 @@ with st.form("quote_form"):
         index=0
     )
 
+    # Submit button must be inside the form [1](https://codeberg.org/rdwz/gitmoji)
     submitted = st.form_submit_button("Calculate Quote", type="primary")
 
 # ============================================================
@@ -263,7 +273,7 @@ if submitted:
     posts = sections + 1
     rails = sections * rails_per_section
 
-    # Pickets per foot uses admin picket width + fixed gap
+    # Pickets per foot uses admin picket width + fixed near-privacy gap
     ppf = pickets_per_ft_from_width_gap(picket_width_in, NEAR_PRIVACY_GAP_IN)
     pickets = ceil_qty(length_ft * ppf)
 
@@ -320,7 +330,7 @@ if submitted:
     labor_hrs = install_hrs + demo_hrs
     labor_sell = labor_hrs * labor_rate
 
-    # Rentals: apply ONLY when admin is unlocked + demo+concrete
+    # Rentals: not assumed; ONLY included if admin unlocked + enabled + demo+concrete
     rental_total = 0.0
     if st.session_state.is_admin and demo_old and old_concrete:
         if enable_equipment_rental:
@@ -362,6 +372,7 @@ if submitted:
 
     pdf_bytes = build_quote_pdf(quote)
 
+    # Download button sends bytes to browser [2](https://cheat-sheet.streamlit.app/)
     st.download_button(
         label="📄 Download Professional Quote PDF",
         data=pdf_bytes,
