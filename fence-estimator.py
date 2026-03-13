@@ -43,9 +43,9 @@ if st.button("Calculate Quote", type="primary"):
     per_ft = round(total / length_ft, 2)
 
     st.success(f"**Total Installed Price:** \\${total:,.2f} (\\${per_ft:,.2f}/ft)")
-st.write(f"Posts: {posts} | Pickets: {pickets} | Labor: {labor_hrs:.1f} hrs")
+    st.write(f"Posts: {posts} | Pickets: {pickets} | Labor: {labor_hrs:.1f} hrs")
 
-demo_old = st.checkbox("Include Demo & Removal of Old Fence", value=True)
+    demo_old = st.checkbox("Include Demo & Removal of Old Fence", value=True)
 ...
 pdf.cell(0, 10, f"Per foot: ${per_ft:,.2f} | Includes full demo & disposal", ln=1)
 
