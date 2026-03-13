@@ -5,6 +5,29 @@ from pathlib import Path
 import streamlit as st
 from fpdf import FPDF
 
+# --- Admin mode ---
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
+
+with st.sidebar:
+    st.markdown("### Admin")
+    pin = st.text_input("Enter PIN", type="password", placeholder="••••")
+
+    # Compare against Secrets (preferred)
+    expected_pin = st.secrets.get("ADMIN_PIN", "")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("Unlock", use_container_width=True):
+            st.session_state.is_admin = (pin == expected_pin and expected_pin != "")
+            if not st.session_state.is_admin:
+                st.error("Incorrect PIN.")
+
+    with col_b:
+        if st.button("Lock", use_container_width=True):
+            st.session_state.is_admin = False
+            st.success("Locked.")
+
 # ----------------------------
 # Paths + Contact (repo-root filenames per your GitHub screenshot)
 # ----------------------------
