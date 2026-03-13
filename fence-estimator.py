@@ -22,8 +22,9 @@ PAGE_ICON = str(LOGO_APP_PATH) if LOGO_APP_PATH.exists() else "🧰"
 # Page setup
 # ----------------------------
 st.set_page_config(page_title="Roberts Fence Estimator", page_icon=PAGE_ICON, layout="centered")
-st.title("Roberts Residential, LLC. Fence Estimator")
-st.caption("Dothan, AL")
+st.title("Roberts Residential, LLC. - Fence Estimator")
+st.caption("Contact: joe@roberts-residential.com or 706-570-6569")
+st.caption("Serving the Greater Dothan & Wiregrass Region")
 
 # Center logo in the Streamlit app UI
 if LOGO_APP_PATH.exists():
