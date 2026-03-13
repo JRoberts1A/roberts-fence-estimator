@@ -26,8 +26,9 @@ st.set_page_config(
     page_icon=PAGE_ICON,  # supports image path or emoji [3](https://github.com/streamlit/streamlit/issues/11370)
     layout="centered"
 )
-st.title("Roberts Residential, LLC. Fence Estimator")
-st.caption("Dothan, AL")
+st.title("Fence Estimator")
+st.caption("Contact us at joe@roberts-residential.com or directly at 706-570-6569")
+st.caption("Serving the Greater Dothan & Wiregrass Region")
 
 # Center logo in the app UI
 if LOGO_APP_PATH.exists():
